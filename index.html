@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>卫戍消消乐</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0a2e;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+    overflow: hidden;
+  }
+
+  #game-container {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+  }
+
+  #board-wrapper {
+    position: relative;
+    border: 3px solid #3a5a9c;
+    border-radius: 8px;
+    background: #0d0d1a;
+    box-shadow: 0 0 40px rgba(58, 90, 156, 0.4), inset 0 0 20px rgba(0,0,0,0.6);
+  }
+
+  canvas#board {
+    display: block;
+  }
+
+  #side-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 160px;
+  }
+
+  .panel-box {
+    background: #0d0d1a;
+    border: 2px solid #3a5a9c;
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+    box-shadow: 0 0 20px rgba(58, 90, 156, 0.3);
+  }
+
+  .panel-box h3 {
+    color: #7eb8da;
+    font-size: 14px;
+    margin-bottom: 10px;
+    letter-spacing: 2px;
+  }
+
+  #next-piece {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 80px;
+  }
+
+  #next-piece img {
+    width: 24px;
+    height: 24px;
+    image-rendering: pixelated;
+  }
+
+  #score-display, #level-display, #lines-display {
+    color: #fff;
+    font-size: 28px;
+    font-weight: bold;
+    text-shadow: 0 0 10px rgba(126, 184, 218, 0.6);
+  }
+
+  #game-title {
+    color: #ffd700;
+    font-size: 20px;
+    font-weight: bold;
+    text-align: center;
+    letter-spacing: 4px;
+    text-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
+    margin-bottom: 4px;
+  }
+
+  .controls {
+    color: #6a8db5;
+    font-size: 13px;
+    line-height: 1.8;
+    text-align: left;
+  }
+
+  .controls span {
+    color: #7eb8da;
+    font-weight: bold;
+  }
+
+  #game-over-overlay {
+    display: none;
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.75);
+    border-radius: 6px;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
+  }
+
+  #game-over-overlay.active {
+    display: flex;
+  }
+
+  #game-over-overlay .go-text {
+    color: #ff4444;
+    font-size: 32px;
+    font-weight: bold;
+    letter-spacing: 4px;
+  }
+
+  #game-over-overlay .go-score {
+    color: #ffd700;
+    font-size: 22px;
+  }
+
+  #restart-btn {
+    background: #3a5a9c;
+    color: #fff;
+    border: none;
+    padding: 10px 30px;
+    font-size: 18px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    letter-spacing: 2px;
+    transition: background 0.2s;
+  }
+
+  #restart-btn:hover {
+    background: #4a7ac4;
+  }
+</style>
+</head>
+<body>
+
+<div id="game-container">
+  <div id="board-wrapper">
+    <canvas id="board"></canvas>
+    <div id="game-over-overlay">
+      <div class="go-text">游戏结束</div>
+      <div class="go-score" id="final-score"></div>
+      <button id="restart-btn" onclick="restart()">重新开始</button>
+    </div>
+  </div>
+
+  <div id="side-panel">
+    <div id="game-title">🛡 卫戍消消乐</div>
+    <div class="panel-box">
+      <h3>下一个</h3>
+      <div id="next-piece"></div>
+    </div>
+    <div class="panel-box">
+      <h3>分数</h3>
+      <div id="score-display">0</div>
+    </div>
+    <div class="panel-box">
+      <h3>等级</h3>
+      <div id="level-display">1</div>
+    </div>
+    <div class="panel-box">
+      <h3>消除行数</h3>
+      <div id="lines-display">0</div>
+    </div>
+    <div class="panel-box">
+      <div class="controls">
+        <span>← →</span> 移动<br>
+        <span>↑</span> 旋转<br>
+        <span>↓</span> 加速下落<br>
+        <span>空格</span> 硬降<br>
+        <span>P</span> 暂停
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const COLS = 10;
+const ROWS = 20;
+const CELL = 30;
+
+const IMG_FILES = [
+  '-klbw3Q2x-1w3jZqT1kS8c-8c.gif',
+  '-klbw3Q2x-3zk4Z26T1kS8c-8c.gif',
+  '-klbw3Q2x-5l8mXaT1kS8c-8c.gif',
+  '-klbw3Q2x-5s4eXdT1kS8c-8c.gif',
+  '-klbw3Q2x-ar77Z1cT1kS8c-8c.gif',
+  '-klbw3Q2x-bu25ZwT1kS8c-8c.gif',
+  '-klbw3Q2x-c1p8Z2pT1kS8c-8c.gif',
+  '-klbw3Q2x-dbi2Z24T1kS8c-8c.gif',
+  '-klbw3Q2x-etsjZ1bT1kS8c-8c.gif',
+  '-klbw3Q2x-fqxjXkT1kS8c-8c.gif',
+  '-klbw3Q2x-lbowZjT1kS8c-8c.gif',
+];
+
+// Classic Tetromino shape templates (1 = filled, 0 = empty)
+const PIECE_SHAPES = {
+  I: [[1,1,1,1]],
+  O: [[1,1],[1,1]],
+  T: [[0,1,0],[1,1,1]],
+  S: [[0,1,1],[1,1,0]],
+  Z: [[1,1,0],[0,1,1]],
+  J: [[1,0,0],[1,1,1]],
+  L: [[0,0,1],[1,1,1]],
+};
+const PIECE_NAMES = Object.keys(PIECE_SHAPES);
+
+// Fallback colors while images load
+const COLORS = [
+  '#ff6b6b', '#ffd93d', '#6bcb77', '#4d96ff',
+  '#ff922b', '#845ef7', '#20c997', '#ff6eb4',
+  '#5c7cfa', '#f06595', '#339af0',
+];
+
+// Preload images
+const images = {};
+IMG_FILES.forEach((file, i) => {
+  const img = new Image();
+  img.src = file;
+  images[i] = img;
+});
+
+// Game state
+let board = [];
+let currentPiece = null;
+let nextPiece = null; // stored as { name, cellData } — cellData is a shape with image indices
+let score = 0;
+let level = 1;
+let lines = 0;
+let gameOver = false;
+let paused = false;
+let lastDrop = 0;
+let dropInterval = 800;
+
+const canvas = document.getElementById('board');
+const ctx = canvas.getContext('2d');
+canvas.width = COLS * CELL;
+canvas.height = ROWS * CELL;
+
+const overlay = document.getElementById('game-over-overlay');
+const scoreDisplay = document.getElementById('score-display');
+const levelDisplay = document.getElementById('level-display');
+const linesDisplay = document.getElementById('lines-display');
+const nextPieceDiv = document.getElementById('next-piece');
+const finalScore = document.getElementById('final-score');
+
+function randomImage() {
+  return Math.floor(Math.random() * IMG_FILES.length);
+}
+
+// Build cellData from a shape template — each filled cell gets its own random image
+function makeCellData(name) {
+  return PIECE_SHAPES[name].map(row =>
+    row.map(v => v ? randomImage() : null)
+  );
+}
+
+function createPiece(name) {
+  return {
+    name: name,
+    cellData: makeCellData(name),
+    x: Math.floor((COLS - PIECE_SHAPES[name][0].length) / 2),
+    y: 0,
+  };
+}
+
+function rotateCellData(data) {
+  const rows = data.length;
+  const cols = data[0].length;
+  const result = [];
+  for (let c = 0; c < cols; c++) {
+    const newRow = [];
+    for (let r = rows - 1; r >= 0; r--) {
+      newRow.push(data[r][c]);
+    }
+    result.push(newRow);
+  }
+  return result;
+}
+
+function collides(piece) {
+  for (let r = 0; r < piece.cellData.length; r++) {
+    for (let c = 0; c < piece.cellData[r].length; c++) {
+      if (piece.cellData[r][c] === null) continue;
+      const bx = piece.x + c;
+      const by = piece.y + r;
+      if (bx < 0 || bx >= COLS || by >= ROWS) return true;
+      if (by < 0) continue;
+      if (board[by][bx] !== null) return true;
+    }
+  }
+  return false;
+}
+
+function lockPiece() {
+  const p = currentPiece;
+  console.log('🔒 lockPiece: name=' + p.name + ' y=' + p.y + ' x=' + p.x + ' rows=' + p.cellData.length);
+  for (let r = 0; r < p.cellData.length; r++) {
+    for (let c = 0; c < p.cellData[r].length; c++) {
+      if (p.cellData[r][c] === null) continue;
+      const bx = p.x + c;
+      const by = p.y + r;
+      if (by < 0) {
+        console.log('💀 GAME OVER in lockPiece: piece above board, by=' + by);
+        triggerGameOver();
+        return;
+      }
+      board[by][bx] = p.cellData[r][c];
+    }
+  }
+  clearLines();
+  spawnPiece();
+}
+
+function clearLines() {
+  let cleared = 0;
+  for (let r = ROWS - 1; r >= 0; r--) {
+    if (board[r].every(cell => cell !== null)) {
+      board.splice(r, 1);
+      board.unshift(new Array(COLS).fill(null));
+      cleared++;
+      r++;
+    }
+  }
+  if (cleared > 0) {
+    const points = [0, 100, 300, 500, 800];
+    score += points[cleared] * level;
+    lines += cleared;
+    level = Math.floor(lines / 10) + 1;
+    dropInterval = Math.max(50, 800 - (level - 1) * 60);
+    updateUI();
+  }
+}
+
+function triggerGameOver() {
+  gameOver = true;
+  overlay.classList.add('active');
+  finalScore.textContent = '最终得分: ' + score;
+}
+
+function boardOccupiedRows() {
+  let s = '';
+  for (let r = 0; r < Math.min(4, ROWS); r++) {
+    let row = '';
+    for (let c = 0; c < COLS; c++) {
+      row += board[r][c] !== null ? 'X' : '.';
+    }
+    s += '  row' + r + ': [' + row + ']';
+    if (r < 3) s += '\n';
+  }
+  return s;
+}
+
+function spawnPiece() {
+  if (nextPiece) {
+    currentPiece = {
+      name: nextPiece.name,
+      cellData: nextPiece.cellData.map(row => [...row]),
+      x: Math.floor((COLS - PIECE_SHAPES[nextPiece.name][0].length) / 2),
+      y: 0,
+    };
+  } else {
+    currentPiece = createPiece(PIECE_NAMES[Math.floor(Math.random() * PIECE_NAMES.length)]);
+  }
+
+  const nextName = PIECE_NAMES[Math.floor(Math.random() * PIECE_NAMES.length)];
+  nextPiece = { name: nextName, cellData: makeCellData(nextName) };
+
+  console.log('🎯 spawnPiece: name=' + currentPiece.name + ' x=' + currentPiece.x + ' y=' + currentPiece.y);
+  if (collides(currentPiece)) {
+    console.log('💀 GAME OVER in spawnPiece: collision at spawn!\n' + boardOccupiedRows());
+    triggerGameOver();
+  }
+  renderNextPiece();
+}
+
+function movePiece(dx, dy) {
+  currentPiece.x += dx;
+  currentPiece.y += dy;
+  if (collides(currentPiece)) {
+    currentPiece.x -= dx;
+    currentPiece.y -= dy;
+    if (dy > 0) {
+      lockPiece();
+    }
+    return false;
+  }
+  return true;
+}
+
+function rotatePiece() {
+  const oldData = currentPiece.cellData;
+  currentPiece.cellData = rotateCellData(currentPiece.cellData);
+
+  const kicks = [0, -1, 1, -2, 2];
+  let ok = false;
+  for (const dx of kicks) {
+    currentPiece.x += dx;
+    if (!collides(currentPiece)) {
+      ok = true;
+      break;
+    }
+    currentPiece.x -= dx;
+  }
+  if (!ok) {
+    currentPiece.cellData = oldData;
+  }
+}
+
+function hardDrop() {
+  // Drop until one more step would collide, then lock once
+  while (true) {
+    currentPiece.y++;
+    if (collides(currentPiece)) {
+      currentPiece.y--;
+      lockPiece();
+      return;
+    }
+  }
+}
+
+function drawCell(cx, cy, imgIdx) {
+  const img = images[imgIdx];
+  if (img && img.complete && img.naturalWidth > 0) {
+    ctx.drawImage(img, cx * CELL + 1, cy * CELL + 1, CELL - 2, CELL - 2);
+  } else {
+    ctx.fillStyle = COLORS[imgIdx];
+    ctx.fillRect(cx * CELL + 1, cy * CELL + 1, CELL - 2, CELL - 2);
+  }
+}
+
+function drawBoard() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Grid
+  ctx.strokeStyle = 'rgba(58, 90, 156, 0.15)';
+  ctx.lineWidth = 0.5;
+  for (let r = 0; r <= ROWS; r++) {
+    ctx.beginPath();
+    ctx.moveTo(0, r * CELL);
+    ctx.lineTo(COLS * CELL, r * CELL);
+    ctx.stroke();
+  }
+  for (let c = 0; c <= COLS; c++) {
+    ctx.beginPath();
+    ctx.moveTo(c * CELL, 0);
+    ctx.lineTo(c * CELL, ROWS * CELL);
+    ctx.stroke();
+  }
+
+  // Locked cells
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (board[r][c] !== null) {
+        drawCell(c, r, board[r][c]);
+      }
+    }
+  }
+
+  if (currentPiece && !gameOver) {
+    // Current piece
+    for (let r = 0; r < currentPiece.cellData.length; r++) {
+      for (let c = 0; c < currentPiece.cellData[r].length; c++) {
+        const imgIdx = currentPiece.cellData[r][c];
+        if (imgIdx === null) continue;
+        const bx = currentPiece.x + c;
+        const by = currentPiece.y + r;
+        if (by < 0) continue;
+        drawCell(bx, by, imgIdx);
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(bx * CELL + 1, by * CELL + 1, CELL - 2, CELL - 2);
+      }
+    }
+  }
+
+  if (paused && !gameOver) {
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 28px "Microsoft YaHei"';
+    ctx.textAlign = 'center';
+    ctx.fillText('暂停中', canvas.width / 2, canvas.height / 2);
+  }
+}
+
+function renderNextPiece() {
+  nextPieceDiv.innerHTML = '';
+  if (!nextPiece) return;
+  const data = nextPiece.cellData;
+  const rows = data.length;
+  const cols = data[0].length;
+  const size = 22;
+
+  const container = document.createElement('div');
+  container.style.display = 'grid';
+  container.style.gridTemplateColumns = `repeat(${cols}, ${size}px)`;
+  container.style.gridTemplateRows = `repeat(${rows}, ${size}px)`;
+  container.style.gap = '1px';
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cell = document.createElement('div');
+      cell.style.width = size + 'px';
+      cell.style.height = size + 'px';
+      const imgIdx = data[r][c];
+      if (imgIdx !== null) {
+        const img = images[imgIdx];
+        if (img) {
+          const thumb = document.createElement('img');
+          thumb.src = img.src;
+          thumb.style.width = '100%';
+          thumb.style.height = '100%';
+          thumb.style.imageRendering = 'pixelated';
+          cell.appendChild(thumb);
+        } else {
+          cell.style.background = COLORS[imgIdx];
+        }
+      }
+      container.appendChild(cell);
+    }
+  }
+  nextPieceDiv.appendChild(container);
+}
+
+function updateUI() {
+  scoreDisplay.textContent = score;
+  levelDisplay.textContent = level;
+  linesDisplay.textContent = lines;
+}
+
+function gameLoop(timestamp) {
+  if (!gameOver && !paused) {
+    if (timestamp - lastDrop > dropInterval) {
+      movePiece(0, 1);
+      lastDrop = timestamp;
+    }
+  }
+  drawBoard();
+  requestAnimationFrame(gameLoop);
+}
+
+function restart() {
+  board = Array.from({ length: ROWS }, () => new Array(COLS).fill(null));
+  score = 0;
+  level = 1;
+  lines = 0;
+  gameOver = false;
+  paused = false;
+  dropInterval = 800;
+  currentPiece = null;
+  nextPiece = null;
+  overlay.classList.remove('active');
+
+  const initName = PIECE_NAMES[Math.floor(Math.random() * PIECE_NAMES.length)];
+  nextPiece = { name: initName, cellData: makeCellData(initName) };
+  spawnPiece();
+
+  updateUI();
+  lastDrop = performance.now();
+}
+
+document.addEventListener('keydown', (e) => {
+  if (gameOver) {
+    if (e.key === 'r' || e.key === 'R') restart();
+    return;
+  }
+
+  if (e.key === 'p' || e.key === 'P') {
+    paused = !paused;
+    if (!paused) lastDrop = performance.now();
+    drawBoard();
+    return;
+  }
+
+  if (paused) return;
+
+  switch (e.key) {
+    case 'ArrowLeft':
+      e.preventDefault();
+      movePiece(-1, 0);
+      break;
+    case 'ArrowRight':
+      e.preventDefault();
+      movePiece(1, 0);
+      break;
+    case 'ArrowDown':
+      e.preventDefault();
+      movePiece(0, 1);
+      lastDrop = performance.now();
+      break;
+    case 'ArrowUp':
+      e.preventDefault();
+      rotatePiece();
+      break;
+    case ' ':
+      e.preventDefault();
+      hardDrop();
+      lastDrop = performance.now();
+      break;
+  }
+});
+
+// Init
+board = Array.from({ length: ROWS }, () => new Array(COLS).fill(null));
+const initName = PIECE_NAMES[Math.floor(Math.random() * PIECE_NAMES.length)];
+nextPiece = { name: initName, cellData: makeCellData(initName) };
+spawnPiece();
+updateUI();
+lastDrop = performance.now();
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
