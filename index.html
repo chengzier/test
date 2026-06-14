@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>卫戍消消乐</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -144,6 +144,135 @@
   #restart-btn:hover {
     background: #4a7ac4;
   }
+
+  #restart-btn:active {
+    background: #2a4a7c;
+  }
+
+  /* Touch controls */
+  #touch-controls {
+    display: none;
+    gap: 8px;
+    margin-top: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .touch-btn {
+    width: 56px;
+    height: 56px;
+    border-radius: 12px;
+    border: 2px solid #3a5a9c;
+    background: #0d0d1a;
+    color: #7eb8da;
+    font-size: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    touch-action: manipulation;
+  }
+
+  .touch-btn:active {
+    background: #1a2a4a;
+    border-color: #7eb8da;
+  }
+
+  .touch-btn.wide {
+    width: 80px;
+    font-size: 16px;
+    font-weight: bold;
+    letter-spacing: 1px;
+  }
+
+  /* Mobile layout */
+  @media (max-width: 600px) {
+    body {
+      flex-direction: column;
+      height: auto;
+      min-height: 100vh;
+      min-height: 100dvh;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    #game-container {
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+    }
+
+    #board-wrapper {
+      border-width: 2px;
+    }
+
+    canvas#board {
+      max-width: 100%;
+      height: auto;
+    }
+
+    #side-panel {
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: 8px;
+      min-width: auto;
+      justify-content: center;
+      width: 100%;
+      max-width: 340px;
+    }
+
+    #game-title {
+      width: 100%;
+      font-size: 16px;
+      letter-spacing: 2px;
+      margin-bottom: 0;
+    }
+
+    .panel-box {
+      flex: 1;
+      min-width: 60px;
+      padding: 8px 6px;
+      border-width: 1px;
+    }
+
+    .panel-box h3 {
+      font-size: 11px;
+      margin-bottom: 4px;
+      letter-spacing: 1px;
+    }
+
+    #score-display, #level-display, #lines-display {
+      font-size: 20px;
+    }
+
+    .controls {
+      display: none;
+    }
+
+    #next-piece {
+      min-height: 50px;
+    }
+
+    #touch-controls {
+      display: flex;
+    }
+
+    #game-over-overlay .go-text {
+      font-size: 24px;
+    }
+
+    #game-over-overlay .go-score {
+      font-size: 16px;
+    }
+
+    #restart-btn {
+      padding: 8px 20px;
+      font-size: 16px;
+    }
+  }
 </style>
 </head>
 <body>
@@ -186,6 +315,14 @@
       </div>
     </div>
   </div>
+</div>
+
+<div id="touch-controls">
+  <button class="touch-btn" data-action="left" title="左移">◀</button>
+  <button class="touch-btn" data-action="rotate" title="旋转">↻</button>
+  <button class="touch-btn" data-action="down" title="软降">▼</button>
+  <button class="touch-btn wide" data-action="drop" title="硬降">⏬</button>
+  <button class="touch-btn" data-action="right" title="右移">▶</button>
 </div>
 
 <script>
@@ -633,6 +770,62 @@ document.addEventListener('keydown', (e) => {
       break;
   }
 });
+
+// Touch button handlers
+document.querySelectorAll('.touch-btn').forEach(btn => {
+  btn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    if (gameOver || paused) return;
+    const action = btn.dataset.action;
+    if (action === 'left') movePiece(-1, 0);
+    if (action === 'right') movePiece(1, 0);
+    if (action === 'down') { movePiece(0, 1); lastDrop = performance.now(); }
+    if (action === 'rotate') rotatePiece();
+    if (action === 'drop') { hardDrop(); lastDrop = performance.now(); }
+  });
+});
+
+// Swipe gestures on canvas
+canvas.style.touchAction = 'none';
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+let touchStartX = 0, touchStartY = 0, touchStartTime = 0;
+
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  if (gameOver || paused) return;
+  const t = e.touches[0];
+  touchStartX = t.clientX;
+  touchStartY = t.clientY;
+  touchStartTime = Date.now();
+}, { passive: false });
+
+canvas.addEventListener('touchend', (e) => {
+  e.preventDefault();
+  if (gameOver || paused) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - touchStartX;
+  const dy = t.clientY - touchStartY;
+  const dt = Date.now() - touchStartTime;
+  const absDx = Math.abs(dx);
+  const absDy = Math.abs(dy);
+
+  if (absDx < 10 && absDy < 10 && dt < 300) {
+    // Tap → rotate
+    rotatePiece();
+  } else if (absDy > absDx && dy > 40) {
+    // Swipe down → hard drop
+    hardDrop();
+    lastDrop = performance.now();
+  } else if (absDx > absDy && absDx > 20) {
+    // Swipe horizontally → move
+    if (dx > 0) movePiece(1, 0);
+    else movePiece(-1, 0);
+  }
+}, { passive: false });
+
+// Prevent accidental zoom on double-tap
+document.addEventListener('dblclick', e => e.preventDefault());
 
 // Init — game starts immediately, images load in background via Cache API
 board = Array.from({ length: ROWS }, () => new Array(COLS).fill(null));
