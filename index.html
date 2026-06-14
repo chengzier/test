@@ -226,16 +226,18 @@ const COLORS = [
   '#5c7cfa', '#f06595', '#339af0',
 ];
 
-// Preload images
+// Preload images — use img.complete fallback for cached images
 const images = {};
 const imagesLoaded = {};
 IMG_FILES.forEach((file, i) => {
   const img = new Image();
   images[i] = img;
   imagesLoaded[i] = false;
-  img.onload = () => { imagesLoaded[i] = true; };
-  img.onerror = () => { imagesLoaded[i] = true; };
+  function markLoaded() { imagesLoaded[i] = true; }
+  img.onload = markLoaded;
+  img.onerror = markLoaded;
   img.src = file;
+  if (img.complete) markLoaded();
 });
 
 // Game state
