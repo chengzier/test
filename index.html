@@ -228,10 +228,20 @@ const COLORS = [
 
 // Preload images
 const images = {};
+const imagesLoaded = {};
+let allImagesLoaded = false;
+let loadedCount = 0;
 IMG_FILES.forEach((file, i) => {
   const img = new Image();
-  img.src = file;
   images[i] = img;
+  imagesLoaded[i] = false;
+  img.onload = () => {
+    imagesLoaded[i] = true;
+    loadedCount++;
+    if (loadedCount === IMG_FILES.length) allImagesLoaded = true;
+  };
+  img.onerror = () => { console.warn('Failed to load:', file); };
+  img.src = file;
 });
 
 // Game state
@@ -434,9 +444,8 @@ function hardDrop() {
 }
 
 function drawCell(cx, cy, imgIdx) {
-  const img = images[imgIdx];
-  if (img && img.complete && img.naturalWidth > 0) {
-    ctx.drawImage(img, cx * CELL + 1, cy * CELL + 1, CELL - 2, CELL - 2);
+  if (imagesLoaded[imgIdx]) {
+    ctx.drawImage(images[imgIdx], cx * CELL + 1, cy * CELL + 1, CELL - 2, CELL - 2);
   } else {
     ctx.fillStyle = COLORS[imgIdx];
     ctx.fillRect(cx * CELL + 1, cy * CELL + 1, CELL - 2, CELL - 2);
@@ -445,6 +454,15 @@ function drawCell(cx, cy, imgIdx) {
 
 function drawBoard() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (!allImagesLoaded) {
+    ctx.fillStyle = '#fff';
+    ctx.font = '18px "Microsoft YaHei"';
+    ctx.textAlign = 'center';
+    ctx.fillText('加载中 ' + loadedCount + '/' + IMG_FILES.length + ' ...', canvas.width / 2, canvas.height / 2);
+    requestAnimationFrame(gameLoop);
+    return;
+  }
 
   // Grid
   ctx.strokeStyle = 'rgba(58, 90, 156, 0.15)';
@@ -519,13 +537,11 @@ function renderNextPiece() {
       cell.style.height = size + 'px';
       const imgIdx = data[r][c];
       if (imgIdx !== null) {
-        const img = images[imgIdx];
-        if (img) {
+        if (imagesLoaded[imgIdx]) {
           const thumb = document.createElement('img');
-          thumb.src = img.src;
+          thumb.src = images[imgIdx].src;
           thumb.style.width = '100%';
           thumb.style.height = '100%';
-          thumb.style.imageRendering = 'pixelated';
           cell.appendChild(thumb);
         } else {
           cell.style.background = COLORS[imgIdx];
