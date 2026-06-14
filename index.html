@@ -226,19 +226,35 @@ const COLORS = [
   '#5c7cfa', '#f06595', '#339af0',
 ];
 
-// Preload images — use img.complete fallback for cached images
+// Persistent image cache using Cache API
 const images = {};
 const imagesLoaded = {};
-IMG_FILES.forEach((file, i) => {
-  const img = new Image();
-  images[i] = img;
-  imagesLoaded[i] = false;
-  function markLoaded() { imagesLoaded[i] = true; }
-  img.onload = markLoaded;
-  img.onerror = markLoaded;
-  img.src = file;
-  if (img.complete) markLoaded();
-});
+
+async function loadImages() {
+  const cache = await caches.open('weishu-v1');
+  for (let i = 0; i < IMG_FILES.length; i++) {
+    const file = IMG_FILES[i];
+    let response = await cache.match(file);
+    if (!response) {
+      try {
+        response = await fetch(file);
+        if (response.ok) cache.put(file, response.clone());
+      } catch (e) {
+        // network error — try again next visit
+      }
+    }
+    if (response && response.ok) {
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.src = url;
+      images[i] = img;
+      imagesLoaded[i] = true;
+    } else {
+      imagesLoaded[i] = true; // use fallback color
+    }
+  }
+}
 
 // Game state
 let board = [];
@@ -618,7 +634,7 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// Init
+// Init — game starts immediately, images load in background via Cache API
 board = Array.from({ length: ROWS }, () => new Array(COLS).fill(null));
 const initName = PIECE_NAMES[Math.floor(Math.random() * PIECE_NAMES.length)];
 nextPiece = { name: initName, cellData: makeCellData(initName) };
@@ -626,6 +642,7 @@ spawnPiece();
 updateUI();
 lastDrop = performance.now();
 requestAnimationFrame(gameLoop);
+loadImages();
 </script>
 </body>
 </html>
